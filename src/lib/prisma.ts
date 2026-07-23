@@ -1,11 +1,14 @@
 import { PrismaMariaDb } from "@prisma/adapter-mariadb";
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+const { PrismaClient } = require("@prisma/client");
+
 const globalForPrisma = globalThis as unknown as { prisma: any };
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+let _prisma: any = null;
+
 function createPrismaClient() {
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
-  const { PrismaClient } = require("@prisma/client");
   const url = new URL(process.env.DATABASE_URL!);
   const adapter = new PrismaMariaDb({
     host: url.hostname,
@@ -18,6 +21,18 @@ function createPrismaClient() {
   return new PrismaClient({ adapter });
 }
 
-export const prisma = globalForPrisma.prisma || createPrismaClient();
+function getPrisma(): any {
+  if (process.env.NODE_ENV === "production") {
+    if (!_prisma) _prisma = createPrismaClient();
+    return _prisma;
+  }
+  if (!globalForPrisma.prisma) globalForPrisma.prisma = createPrismaClient();
+  return globalForPrisma.prisma;
+}
 
-if (process.env.NODE_ENV !== "production") globalForPrisma.prisma = prisma;
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export const prisma: any = new Proxy({} as any, {
+  get(_, prop) {
+    return (getPrisma() as any)[prop as string];
+  },
+});
