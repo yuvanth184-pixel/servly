@@ -40,7 +40,7 @@ export default function AdminCustomersPage() {
       setLoading(true);
       const res = await fetch("/api/admin/customers");
       const json = await res.json();
-      setData(json.users || []);
+      setData(json.customers || []);
     } catch {
       toast.error("Failed to load customers");
     } finally {
