@@ -1,0 +1,75 @@
+import { NextRequest, NextResponse } from "next/server";
+
+const publicRoutes = [
+  "/",
+  "/sign-in",
+  "/sign-up",
+];
+
+function isPublicRoute(pathname: string) {
+  return publicRoutes.includes(pathname);
+}
+
+function getRoleFromSession(session: string): string | null {
+  try {
+    const decoded = JSON.parse(atob(session));
+    return decoded.role || null;
+  } catch {
+    return null;
+  }
+}
+
+const portalRoles: Record<string, string> = {
+  admin: "admin",
+  customer: "customer",
+  technician: "technician",
+};
+
+export function proxy(request: NextRequest) {
+  const session = request.cookies.get("session")?.value;
+  const pathname = request.nextUrl.pathname;
+
+  if (pathname.startsWith("/api/")) {
+    return NextResponse.next();
+  }
+
+  if (session) {
+    if (pathname === "/sign-in" || pathname === "/sign-up") {
+      const role = getRoleFromSession(session);
+      if (role === "admin") return NextResponse.redirect(new URL("/admin/dashboard", request.url));
+      if (role === "technician") return NextResponse.redirect(new URL("/technician/dashboard", request.url));
+      return NextResponse.redirect(new URL("/customer/home", request.url));
+    }
+
+    const role = getRoleFromSession(session);
+
+    const portalMatch = pathname.match(/^\/(admin|customer|technician)/);
+    if (portalMatch) {
+      const portal = portalMatch[1];
+      const requiredRole = portalRoles[portal];
+      if (requiredRole && role !== requiredRole) {
+        const url = request.nextUrl.clone();
+        url.pathname = "/sign-in";
+        url.searchParams.set("from", pathname);
+        return NextResponse.redirect(url);
+      }
+    }
+
+    return NextResponse.next();
+  }
+
+  if (isPublicRoute(pathname)) {
+    return NextResponse.next();
+  }
+
+  const url = request.nextUrl.clone();
+  url.pathname = "/sign-in";
+  url.searchParams.set("from", pathname);
+  return NextResponse.redirect(url);
+}
+
+export const config = {
+  matcher: [
+    "/((?!_next|favicon.ico|api|.*\\.).*)",
+  ],
+};
