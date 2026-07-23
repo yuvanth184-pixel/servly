@@ -1,9 +1,10 @@
 import { PrismaMariaDb } from "@prisma/adapter-mariadb";
-import { Prisma } from "@prisma/client";
+import type { PrismaClient } from "@prisma/client";
 
-type PrismaClientInstance = ReturnType<typeof Prisma.Client>;
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+const PrismaClientModule = require("@prisma/client") as { PrismaClient: new (...args: unknown[]) => PrismaClient };
 
-const globalForPrisma = globalThis as unknown as { prisma: PrismaClientInstance };
+const globalForPrisma = globalThis as unknown as { prisma: PrismaClient };
 
 function createPrismaClient() {
   const url = new URL(process.env.DATABASE_URL!);
@@ -15,7 +16,7 @@ function createPrismaClient() {
     database: url.pathname.replace(/^\//, ""),
     connectionLimit: 20,
   });
-  return new (Prisma as unknown as { new (opts: Record<string, unknown>): PrismaClientInstance })({ adapter });
+  return new PrismaClientModule.PrismaClient({ adapter });
 }
 
 export const prisma = globalForPrisma.prisma || createPrismaClient();
