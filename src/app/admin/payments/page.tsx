@@ -1,10 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { motion } from "motion/react";
 import { MoreHorizontal, Eye, RotateCcw } from "lucide-react";
-import { payments as initialPayments } from "@/data/payments";
-import type { Payment } from "@/types";
 import { PageHeader } from "@/components/admin/shared/PageHeader";
 import { SearchFilter } from "@/components/admin/shared/SearchFilter";
 import { StatusBadge } from "@/components/admin/shared/StatusBadge";
@@ -15,6 +13,17 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { toast } from "sonner";
 
+interface ApiPayment {
+  id: string;
+  amount: number;
+  method: string;
+  status: string;
+  transactionId: string;
+  createdAt: string;
+  bookingId: string;
+  customer: { id: string; name: string; phone: string };
+}
+
 const methodLabels: Record<string, string> = {
   credit_card: "Credit Card",
   debit_card: "Debit Card",
@@ -23,15 +32,35 @@ const methodLabels: Record<string, string> = {
 };
 
 export default function AdminPaymentsPage() {
-  const [data, setData] = useState<Payment[]>(initialPayments);
+  const [data, setData] = useState<ApiPayment[]>([]);
+  const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
-  const [viewPayment, setViewPayment] = useState<Payment | null>(null);
+  const [viewPayment, setViewPayment] = useState<ApiPayment | null>(null);
   const [refundId, setRefundId] = useState<string | null>(null);
+
+  useEffect(() => {
+    async function load() {
+      try {
+        const res = await fetch("/api/admin/payments");
+        const json = await res.json();
+        setData(json.payments ?? []);
+      } catch {
+        toast.error("Failed to load payments data");
+      } finally {
+        setLoading(false);
+      }
+    }
+    load();
+  }, []);
 
   const filtered = data.filter((p) => {
     const q = search.toLowerCase();
-    const matchesSearch = p.id.toLowerCase().includes(q) || p.bookingId.toLowerCase().includes(q) || p.transactionId.toLowerCase().includes(q);
+    const matchesSearch =
+      p.id.toLowerCase().includes(q) ||
+      p.bookingId.toLowerCase().includes(q) ||
+      p.transactionId.toLowerCase().includes(q) ||
+      p.customer.name.toLowerCase().includes(q);
     const matchesStatus = statusFilter === "all" || p.status === statusFilter;
     return matchesSearch && matchesStatus;
   });
@@ -42,16 +71,63 @@ export default function AdminPaymentsPage() {
 
   const handleRefund = () => {
     if (!refundId) return;
-    setData((prev) => prev.map((p) => p.id === refundId ? { ...p, status: "refunded" as const } : p));
+    setData((prev) => prev.map((p) => p.id === refundId ? { ...p, status: "refunded" } : p));
     setRefundId(null);
     toast.success("Refund processed successfully");
   };
+
+  if (loading) {
+    return (
+      <div>
+        <PageHeader title="Payments" description="Track and process payments" />
+        <div className="mb-6 grid grid-cols-3 gap-3">
+          {[0, 1, 2].map((i) => (
+            <div key={i} className="rounded-xl border border-border bg-card p-4">
+              <div className="h-4 w-20 animate-pulse rounded bg-muted mb-2" />
+              <div className="h-6 w-28 animate-pulse rounded bg-muted" />
+            </div>
+          ))}
+        </div>
+        <div className="mb-4 flex gap-3">
+          <div className="flex-1"><div className="h-10 w-full animate-pulse rounded-lg bg-muted" /></div>
+          <div className="h-10 w-40 animate-pulse rounded-lg bg-muted" />
+        </div>
+        <div className="rounded-xl border border-border bg-card">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Payment ID</TableHead>
+                <TableHead>Booking</TableHead>
+                <TableHead>Method</TableHead>
+                <TableHead>Status</TableHead>
+                <TableHead>Date</TableHead>
+                <TableHead className="text-right">Amount</TableHead>
+                <TableHead className="w-12"></TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {Array.from({ length: 5 }).map((_, i) => (
+                <TableRow key={i}>
+                  <TableCell><div className="h-4 w-24 animate-pulse rounded bg-muted" /></TableCell>
+                  <TableCell><div className="h-4 w-20 animate-pulse rounded bg-muted" /></TableCell>
+                  <TableCell><div className="h-4 w-24 animate-pulse rounded bg-muted" /></TableCell>
+                  <TableCell><div className="h-5 w-16 animate-pulse rounded-full bg-muted" /></TableCell>
+                  <TableCell><div className="h-4 w-20 animate-pulse rounded bg-muted" /></TableCell>
+                  <TableCell className="text-right"><div className="ml-auto h-4 w-14 animate-pulse rounded bg-muted" /></TableCell>
+                  <TableCell><div className="h-4 w-4 animate-pulse rounded bg-muted" /></TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div>
       <PageHeader title="Payments" description="Track and process payments" />
 
-      {/* Summary Cards */}
       <div className="mb-6 grid grid-cols-3 gap-3">
         <div className="rounded-xl border border-border bg-card p-4">
           <p className="text-sm text-muted-foreground">Completed</p>
@@ -69,7 +145,7 @@ export default function AdminPaymentsPage() {
 
       <div className="mb-4 flex gap-3">
         <div className="flex-1">
-          <SearchFilter value={search} onChange={setSearch} placeholder="Search by payment ID, booking ID..." />
+          <SearchFilter value={search} onChange={setSearch} placeholder="Search by payment ID, booking ID, customer..." />
         </div>
         <Select value={statusFilter} onValueChange={(v) => v && setStatusFilter(v)}>
           <SelectTrigger className="w-40"><SelectValue /></SelectTrigger>
@@ -126,7 +202,6 @@ export default function AdminPaymentsPage() {
         </Table>
       </div>
 
-      {/* View Dialog */}
       <Dialog open={!!viewPayment} onOpenChange={() => setViewPayment(null)}>
         <DialogContent>
           <DialogHeader><DialogTitle>Payment Details</DialogTitle></DialogHeader>
@@ -137,9 +212,14 @@ export default function AdminPaymentsPage() {
                 <div><span className="text-muted-foreground">Status:</span> <StatusBadge status={viewPayment.status} /></div>
                 <div><span className="text-muted-foreground">Booking ID:</span> {viewPayment.bookingId}</div>
                 <div><span className="text-muted-foreground">Amount:</span> ₹{viewPayment.amount.toLocaleString("en-IN")}</div>
-                <div><span className="text-muted-foreground">Method:</span> {methodLabels[viewPayment.method]}</div>
+                <div><span className="text-muted-foreground">Method:</span> {methodLabels[viewPayment.method] || viewPayment.method}</div>
                 <div><span className="text-muted-foreground">Transaction ID:</span> {viewPayment.transactionId}</div>
                 <div><span className="text-muted-foreground">Date:</span> {new Date(viewPayment.createdAt).toLocaleDateString("en-IN")}</div>
+              </div>
+              <div className="rounded-lg border border-border p-3">
+                <p className="text-muted-foreground mb-1">Customer</p>
+                <p className="font-medium">{viewPayment.customer.name}</p>
+                <p className="text-muted-foreground">{viewPayment.customer.phone}</p>
               </div>
             </div>
           )}

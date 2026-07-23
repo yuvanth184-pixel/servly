@@ -1,15 +1,21 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import { motion } from "motion/react";
 import { Users, CalendarCheck, IndianRupee, Wrench, ArrowUpRight, Clock, UserPlus, Star } from "lucide-react";
-import { dashboardStats, recentActivity, monthlyRevenue } from "@/data/admin/dashboard";
 
-const statCards = [
-  { label: "Total Customers", value: dashboardStats.totalCustomers, icon: Users, color: "text-blue-600 bg-blue-50", change: `+${dashboardStats.newCustomersThisMonth} this month` },
-  { label: "Active Bookings", value: dashboardStats.activeBookings, icon: CalendarCheck, color: "text-green-600 bg-green-50", change: `${dashboardStats.completedThisMonth} completed` },
-  { label: "Total Revenue", value: `₹${(dashboardStats.totalRevenue).toLocaleString("en-IN")}`, icon: IndianRupee, color: "text-purple-600 bg-purple-50", change: `${dashboardStats.pendingPayments} pending` },
-  { label: "Active Technicians", value: dashboardStats.activeTechnicians, icon: Wrench, color: "text-amber-600 bg-amber-50", change: `Avg rating ${dashboardStats.avgRating}` },
-];
+interface DashboardData {
+  totalCustomers: number;
+  totalTechnicians: number;
+  activeBookings: number;
+  completedThisMonth: number;
+  totalRevenue: number;
+  pendingPayments: number;
+  avgRating: number;
+  newCustomersThisMonth: number;
+  recentActivity: Array<{ id: string; type: string; message: string; userName: string; timestamp: string }>;
+  monthlyRevenue: Array<{ month: string; value: number }>;
+}
 
 const activityIcons: Record<string, React.ComponentType<{ className?: string }>> = {
   booking: CalendarCheck,
@@ -25,12 +31,74 @@ const activityColors: Record<string, string> = {
   review: "bg-amber-50 text-amber-600",
 };
 
-const maxRevenue = Math.max(...monthlyRevenue.map((m) => m.value));
-
-export default function AdminDashboardPage() {
+function Skeleton() {
   return (
     <div className="space-y-6">
-      {/* Stat Cards */}
+      <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
+        {[0, 1, 2, 3].map((i) => (
+          <div key={i} className="animate-pulse rounded-xl border border-border bg-card p-4">
+            <div className="flex items-center justify-between">
+              <div className="h-4 w-24 rounded bg-muted" />
+              <div className="size-9 rounded-lg bg-muted" />
+            </div>
+            <div className="mt-2 h-8 w-20 rounded bg-muted" />
+            <div className="mt-1 h-3 w-28 rounded bg-muted" />
+          </div>
+        ))}
+      </div>
+      <div className="grid gap-6 sm:grid-cols-2">
+        <div className="animate-pulse self-start rounded-xl border border-border bg-card p-4">
+          <div className="mb-4 h-5 w-36 rounded bg-muted" />
+          <div className="flex items-end gap-2" style={{ height: 140 }}>
+            {[0, 1, 2, 3, 4, 5].map((i) => (
+              <div key={i} className="flex flex-1 flex-col items-center justify-end">
+                <div className="h-3 w-8 rounded bg-muted" />
+                <div className="mt-1 w-full rounded-t-md bg-muted" style={{ height: `${40 + Math.random() * 60}px` }} />
+                <div className="mt-1 h-3 w-8 rounded bg-muted" />
+              </div>
+            ))}
+          </div>
+        </div>
+        <div className="animate-pulse rounded-xl border border-border bg-card p-4">
+          <div className="mb-4 h-5 w-32 rounded bg-muted" />
+          {[0, 1, 2, 3, 4].map((i) => (
+            <div key={i} className="mb-3 flex items-start gap-3">
+              <div className="size-7 shrink-0 rounded-full bg-muted" />
+              <div className="flex-1 space-y-1">
+                <div className="h-4 w-full rounded bg-muted" />
+                <div className="h-3 w-24 rounded bg-muted" />
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+export default function AdminDashboardPage() {
+  const [data, setData] = useState<DashboardData | null>(null);
+
+  useEffect(() => {
+    fetch("/api/admin/stats")
+      .then((res) => res.json())
+      .then(setData)
+      .catch(() => {});
+  }, []);
+
+  if (!data) return <Skeleton />;
+
+  const maxRevenue = Math.max(...data.monthlyRevenue.map((m) => m.value));
+
+  const statCards = [
+    { label: "Total Customers", value: data.totalCustomers, icon: Users, color: "text-blue-600 bg-blue-50", change: `+${data.newCustomersThisMonth} this month` },
+    { label: "Active Bookings", value: data.activeBookings, icon: CalendarCheck, color: "text-green-600 bg-green-50", change: `${data.completedThisMonth} completed` },
+    { label: "Total Revenue", value: `₹${data.totalRevenue.toLocaleString("en-IN")}`, icon: IndianRupee, color: "text-purple-600 bg-purple-50", change: `${data.pendingPayments} pending` },
+    { label: "Active Technicians", value: data.totalTechnicians, icon: Wrench, color: "text-amber-600 bg-amber-50", change: `Avg rating ${data.avgRating}` },
+  ];
+
+  return (
+    <div className="space-y-6">
       <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
         {statCards.map((card, i) => (
           <motion.div
@@ -53,7 +121,6 @@ export default function AdminDashboardPage() {
       </div>
 
       <div className="grid gap-6 sm:grid-cols-2">
-        {/* Revenue Chart */}
         <motion.div
           initial={{ opacity: 0, y: 10 }}
           animate={{ opacity: 1, y: 0 }}
@@ -62,7 +129,7 @@ export default function AdminDashboardPage() {
         >
           <h3 className="mb-4 font-semibold text-foreground">Monthly Revenue</h3>
           <div className="flex items-end gap-2" style={{ height: 140 }}>
-            {monthlyRevenue.map((m) => (
+            {data.monthlyRevenue.map((m) => (
               <div key={m.month} className="flex flex-1 flex-col items-center justify-end">
                 <span className="mb-1 text-[10px] text-muted-foreground">₹{(m.value / 1000).toFixed(0)}k</span>
                 <div
@@ -75,7 +142,6 @@ export default function AdminDashboardPage() {
           </div>
         </motion.div>
 
-        {/* Recent Activity */}
         <motion.div
           initial={{ opacity: 0, y: 10 }}
           animate={{ opacity: 1, y: 0 }}
@@ -87,7 +153,7 @@ export default function AdminDashboardPage() {
             <Clock className="size-4 text-muted-foreground" />
           </div>
           <div className="space-y-3">
-            {recentActivity.slice(0, 8).map((activity) => {
+            {data.recentActivity.slice(0, 8).map((activity) => {
               const Icon = activityIcons[activity.type] || CalendarCheck;
               const color = activityColors[activity.type] || "bg-gray-50 text-gray-600";
               return (
@@ -106,7 +172,6 @@ export default function AdminDashboardPage() {
         </motion.div>
       </div>
 
-      {/* Quick Actions */}
       <motion.div
         initial={{ opacity: 0, y: 10 }}
         animate={{ opacity: 1, y: 0 }}

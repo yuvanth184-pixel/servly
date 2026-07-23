@@ -1,10 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { motion } from "motion/react";
 import { MoreHorizontal, Eye, Pencil, Trash2 } from "lucide-react";
-import { customers } from "@/data/customers";
-import { type Customer } from "@/types";
 import { PageHeader } from "@/components/admin/shared/PageHeader";
 import { SearchFilter } from "@/components/admin/shared/SearchFilter";
 import { StatusBadge } from "@/components/admin/shared/StatusBadge";
@@ -17,89 +15,142 @@ import { Label } from "@/components/ui/label";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { toast } from "sonner";
 
+interface AdminCustomer {
+  id: string;
+  phone: string;
+  name: string;
+  email: string;
+  role: string;
+  createdAt: string;
+  _count: { bookings: number };
+  subscription: { plan: string; status: string; amount: number } | null;
+}
+
 export default function AdminCustomersPage() {
-  const [data, setData] = useState<Customer[]>(customers);
+  const [data, setData] = useState<AdminCustomer[]>([]);
+  const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
-  const [viewCustomer, setViewCustomer] = useState<Customer | null>(null);
-  const [editCustomer, setEditCustomer] = useState<Customer | null>(null);
+  const [viewCustomer, setViewCustomer] = useState<AdminCustomer | null>(null);
+  const [editCustomer, setEditCustomer] = useState<AdminCustomer | null>(null);
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [addOpen, setAddOpen] = useState(false);
+
+  const fetchCustomers = async () => {
+    try {
+      setLoading(true);
+      const res = await fetch("/api/admin/customers");
+      const json = await res.json();
+      setData(json.users || []);
+    } catch {
+      toast.error("Failed to load customers");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchCustomers();
+  }, []);
 
   const filtered = data.filter((c) => {
     const q = search.toLowerCase();
     return (
-      c.firstName.toLowerCase().includes(q) ||
-      c.lastName.toLowerCase().includes(q) ||
-      c.email.toLowerCase().includes(q) ||
+      (c.name || "").toLowerCase().includes(q) ||
       c.phone.includes(q)
     );
   });
 
-  const handleDelete = () => {
+  const handleDelete = async () => {
     if (!deleteId) return;
-    setData((prev) => prev.filter((c) => c.id !== deleteId));
-    setDeleteId(null);
-    toast.success("Customer deleted successfully");
+    try {
+      const res = await fetch("/api/admin/customers", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ userId: deleteId }),
+      });
+      if (!res.ok) throw new Error("Delete failed");
+      setDeleteId(null);
+      toast.success("Customer deleted successfully");
+      fetchCustomers();
+    } catch {
+      toast.error("Failed to delete customer");
+    }
   };
 
-  const handleAdd = (e: React.FormEvent<HTMLFormElement>) => {
+  const handleAdd = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     const fd = new FormData(e.currentTarget);
-    const newCustomer: Customer = {
-      id: `cust_${Date.now()}`,
-      firstName: fd.get("firstName") as string,
-      lastName: fd.get("lastName") as string,
-      email: fd.get("email") as string,
-      phone: fd.get("phone") as string,
-      address: { street: "", city: "", state: "", zipCode: "", country: "India" },
-      createdAt: new Date(),
-      updatedAt: new Date(),
-      status: "active",
-      totalBookings: 0,
-      totalSpent: 0,
-    };
-    setData((prev) => [newCustomer, ...prev]);
-    setAddOpen(false);
-    toast.success("Customer added successfully");
+    try {
+      const res = await fetch("/api/admin/customers", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          phone: fd.get("phone"),
+          password: fd.get("password"),
+          name: fd.get("name"),
+        }),
+      });
+      if (!res.ok) throw new Error("Add failed");
+      setAddOpen(false);
+      toast.success("Customer added successfully");
+      fetchCustomers();
+    } catch {
+      toast.error("Failed to add customer");
+    }
   };
 
-  const handleEdit = (e: React.FormEvent<HTMLFormElement>) => {
+  const handleEdit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     if (!editCustomer) return;
     const fd = new FormData(e.currentTarget);
-    setData((prev) =>
-      prev.map((c) =>
-        c.id === editCustomer.id
-          ? { ...c, firstName: fd.get("firstName") as string, lastName: fd.get("lastName") as string, email: fd.get("email") as string, phone: fd.get("phone") as string }
-          : c
-      )
-    );
-    setEditCustomer(null);
-    toast.success("Customer updated successfully");
+    try {
+      const res = await fetch("/api/admin/customers", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          userId: editCustomer.id,
+          name: fd.get("name"),
+          phone: fd.get("phone"),
+        }),
+      });
+      if (!res.ok) throw new Error("Edit failed");
+      setEditCustomer(null);
+      toast.success("Customer updated successfully");
+      fetchCustomers();
+    } catch {
+      toast.error("Failed to update customer");
+    }
   };
 
   return (
     <div>
       <PageHeader title="Customers" description="Manage your customer database" actionLabel="Add Customer" onAction={() => setAddOpen(true)} />
-      <SearchFilter value={search} onChange={setSearch} placeholder="Search by name, email or phone..." />
+      <SearchFilter value={search} onChange={setSearch} placeholder="Search by name or phone..." />
 
       <div className="rounded-xl border border-border bg-card">
         <Table>
           <TableHeader>
             <TableRow>
               <TableHead>Name</TableHead>
-              <TableHead>Email</TableHead>
               <TableHead>Phone</TableHead>
-              <TableHead>Status</TableHead>
+              <TableHead>Role</TableHead>
               <TableHead className="text-right">Bookings</TableHead>
-              <TableHead className="text-right">Spent</TableHead>
+              <TableHead>Plan</TableHead>
               <TableHead className="w-12"></TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
-            {filtered.length === 0 ? (
+            {loading ? (
+              Array.from({ length: 5 }).map((_, i) => (
+                <TableRow key={i}>
+                  <TableCell colSpan={6}>
+                    <div className="h-4 animate-pulse rounded bg-muted" />
+                  </TableCell>
+                </TableRow>
+              ))
+            ) : filtered.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={7} className="h-24 text-center text-muted-foreground">
+                <TableCell colSpan={6} className="h-24 text-center text-muted-foreground">
                   No customers found.
                 </TableCell>
               </TableRow>
@@ -113,13 +164,12 @@ export default function AdminCustomersPage() {
                   className="group"
                 >
                   <TableCell className="font-medium">
-                    {customer.firstName} {customer.lastName}
+                    {customer.name || customer.phone}
                   </TableCell>
-                  <TableCell className="text-muted-foreground">{customer.email}</TableCell>
                   <TableCell className="text-muted-foreground">{customer.phone}</TableCell>
-                  <TableCell><StatusBadge status={customer.status} /></TableCell>
-                  <TableCell className="text-right">{customer.totalBookings}</TableCell>
-                  <TableCell className="text-right">₹{customer.totalSpent.toLocaleString("en-IN")}</TableCell>
+                  <TableCell><StatusBadge status={customer.role} /></TableCell>
+                  <TableCell className="text-right">{customer._count.bookings}</TableCell>
+                  <TableCell className="text-muted-foreground">{customer.subscription?.plan ?? "—"}</TableCell>
                   <TableCell>
                     <DropdownMenu>
                       <DropdownMenuTrigger className="rounded-md p-1 text-muted-foreground hover:text-foreground">
@@ -145,7 +195,6 @@ export default function AdminCustomersPage() {
         </Table>
       </div>
 
-      {/* View Dialog */}
       <Dialog open={!!viewCustomer} onOpenChange={() => setViewCustomer(null)}>
         <DialogContent>
           <DialogHeader>
@@ -154,41 +203,32 @@ export default function AdminCustomersPage() {
           {viewCustomer && (
             <div className="space-y-3 text-sm">
               <div className="grid grid-cols-2 gap-2">
-                <div><span className="text-muted-foreground">Name:</span> {viewCustomer.firstName} {viewCustomer.lastName}</div>
-                <div><span className="text-muted-foreground">Status:</span> <StatusBadge status={viewCustomer.status} /></div>
-                <div><span className="text-muted-foreground">Email:</span> {viewCustomer.email}</div>
+                <div><span className="text-muted-foreground">Name:</span> {viewCustomer.name || viewCustomer.phone}</div>
                 <div><span className="text-muted-foreground">Phone:</span> {viewCustomer.phone}</div>
-                <div><span className="text-muted-foreground">Total Bookings:</span> {viewCustomer.totalBookings}</div>
-                <div><span className="text-muted-foreground">Total Spent:</span> ₹{viewCustomer.totalSpent.toLocaleString("en-IN")}</div>
-              </div>
-              <div className="rounded-lg border border-border p-3">
-                <p className="mb-1 font-medium">Address</p>
-                <p className="text-muted-foreground">{viewCustomer.address.street}, {viewCustomer.address.city}, {viewCustomer.address.state} {viewCustomer.address.zipCode}</p>
+                <div><span className="text-muted-foreground">Role:</span> <StatusBadge status={viewCustomer.role} /></div>
+                <div><span className="text-muted-foreground">Plan:</span> {viewCustomer.subscription?.plan ?? "—"}</div>
+                <div><span className="text-muted-foreground">Bookings:</span> {viewCustomer._count.bookings}</div>
+                <div><span className="text-muted-foreground">Member Since:</span> {new Date(viewCustomer.createdAt).toLocaleDateString("en-IN")}</div>
               </div>
             </div>
           )}
         </DialogContent>
       </Dialog>
 
-      {/* Add Dialog */}
       <Dialog open={addOpen} onOpenChange={setAddOpen}>
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Add Customer</DialogTitle>
           </DialogHeader>
           <form onSubmit={handleAdd} className="space-y-4">
-            <div className="grid grid-cols-2 gap-4">
-              <div><Label>First Name</Label><Input name="firstName" required /></div>
-              <div><Label>Last Name</Label><Input name="lastName" required /></div>
-            </div>
-            <div><Label>Email</Label><Input name="email" type="email" required /></div>
+            <div><Label>Name</Label><Input name="name" required /></div>
             <div><Label>Phone</Label><Input name="phone" required /></div>
+            <div><Label>Password</Label><Input name="password" type="password" required /></div>
             <Button type="submit" className="w-full">Add Customer</Button>
           </form>
         </DialogContent>
       </Dialog>
 
-      {/* Edit Dialog */}
       <Dialog open={!!editCustomer} onOpenChange={() => setEditCustomer(null)}>
         <DialogContent>
           <DialogHeader>
@@ -196,11 +236,7 @@ export default function AdminCustomersPage() {
           </DialogHeader>
           {editCustomer && (
             <form onSubmit={handleEdit} className="space-y-4">
-              <div className="grid grid-cols-2 gap-4">
-                <div><Label>First Name</Label><Input name="firstName" defaultValue={editCustomer.firstName} required /></div>
-                <div><Label>Last Name</Label><Input name="lastName" defaultValue={editCustomer.lastName} required /></div>
-              </div>
-              <div><Label>Email</Label><Input name="email" type="email" defaultValue={editCustomer.email} required /></div>
+              <div><Label>Name</Label><Input name="name" defaultValue={editCustomer.name} required /></div>
               <div><Label>Phone</Label><Input name="phone" defaultValue={editCustomer.phone} required /></div>
               <Button type="submit" className="w-full">Save Changes</Button>
             </form>
@@ -208,7 +244,6 @@ export default function AdminCustomersPage() {
         </DialogContent>
       </Dialog>
 
-      {/* Delete Dialog */}
       <ConfirmDialog
         open={!!deleteId}
         onOpenChange={() => setDeleteId(null)}

@@ -11,10 +11,15 @@ model User {
   phone         String         @unique
   password      String
   name          String?
+  email         String?
   role          String         @default("customer")
   createdAt     DateTime       @default(now())
   updatedAt     DateTime       @updatedAt
   subscription  Subscription?
+  bookings      Booking[]      @relation("CustomerBookings")
+  technicianBookings Booking[] @relation("TechnicianBookings")
+  payments      Payment[]
+  technicianProfile TechnicianProfile?
 }
 
 model Subscription {
@@ -28,6 +33,68 @@ model Subscription {
   endDate     DateTime?
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
-
   user User @relation(fields: [userId], references: [id])
+}
+
+model Service {
+  id            String   @id @default(cuid())
+  name          String
+  description   String
+  category      String
+  basePrice     Int
+  duration      Int
+  image         String?
+  slug          String?  @unique
+  isActive      Boolean  @default(true)
+  rating        Float    @default(0)
+  totalBookings Int      @default(0)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  bookings      Booking[]
+}
+
+model Booking {
+  id            String   @id @default(cuid())
+  customerId    String
+  technicianId  String?
+  serviceId     String
+  status        String   @default("pending")
+  scheduledDate DateTime
+  scheduledTime String
+  address       String
+  notes         String?
+  totalAmount   Int
+  paymentStatus String   @default("pending")
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  customer      User     @relation("CustomerBookings", fields: [customerId], references: [id])
+  technician    User?    @relation("TechnicianBookings", fields: [technicianId], references: [id])
+  service       Service  @relation(fields: [serviceId], references: [id])
+  payment       Payment?
+}
+
+model Payment {
+  id            String   @id @default(cuid())
+  bookingId     String   @unique
+  customerId    String
+  amount        Int
+  method        String
+  status        String   @default("pending")
+  transactionId String   @unique
+  createdAt     DateTime @default(now())
+  booking       Booking  @relation(fields: [bookingId], references: [id])
+  customer      User     @relation(fields: [customerId], references: [id])
+}
+
+model TechnicianProfile {
+  id             String   @id @default(cuid())
+  userId         String   @unique
+  specialties    String
+  rating         Float    @default(5.0)
+  totalJobs      Int      @default(0)
+  status         String   @default("available")
+  certifications String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  user           User     @relation(fields: [userId], references: [id])
 }

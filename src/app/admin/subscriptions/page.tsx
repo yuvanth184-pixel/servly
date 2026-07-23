@@ -1,11 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { motion } from "motion/react";
 import { MoreHorizontal, Eye, Pencil, Crown, Bell } from "lucide-react";
-import { subscriptions as initialSubscriptions } from "@/data/subscriptions";
-import type { Subscription } from "@/types";
-import { customers } from "@/data/customers";
 import { PageHeader } from "@/components/admin/shared/PageHeader";
 import { SearchFilter } from "@/components/admin/shared/SearchFilter";
 import { StatusBadge } from "@/components/admin/shared/StatusBadge";
@@ -18,30 +15,80 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { toast } from "sonner";
 
+interface ApiSubscription {
+  id: string;
+  plan: string;
+  status: string;
+  amount: number;
+  razorpayId: string;
+  startDate: string;
+  endDate: string;
+  createdAt: string;
+  user: { id: string; name: string; phone: string };
+}
+
 const planBadge: Record<string, string> = {
-  basic: "bg-gray-50 text-gray-700 border-gray-200",
-  premium: "bg-blue-50 text-blue-700 border-blue-200",
-  enterprise: "bg-purple-50 text-purple-700 border-purple-200",
+  starter: "bg-gray-50 text-gray-700 border-gray-200",
+  pro: "bg-blue-50 text-blue-700 border-blue-200",
+  free: "bg-purple-50 text-purple-700 border-purple-200",
+};
+
+const planLabel: Record<string, string> = {
+  starter: "Starter",
+  pro: "Pro",
+  free: "Free",
 };
 
 const tabs = ["All", "Active", "Expired", "Cancelled"] as const;
 
+function LoadingSkeleton() {
+  return (
+    <div className="space-y-6">
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+        {Array.from({ length: 3 }).map((_, i) => (
+          <div key={i} className="rounded-xl border border-border bg-card p-4">
+            <div className="h-4 w-24 animate-pulse rounded bg-muted" />
+            <div className="mt-2 h-8 w-16 animate-pulse rounded bg-muted" />
+          </div>
+        ))}
+      </div>
+      <div className="h-10 w-full animate-pulse rounded-xl bg-muted" />
+      <div className="rounded-xl border border-border bg-card">
+        {Array.from({ length: 5 }).map((_, i) => (
+          <div key={i} className="flex items-center gap-4 border-b border-border px-4 py-3 last:border-b-0">
+            <div className="h-4 w-20 animate-pulse rounded bg-muted" />
+            <div className="h-4 w-32 animate-pulse rounded bg-muted" />
+            <div className="h-4 w-16 animate-pulse rounded bg-muted" />
+            <div className="h-4 w-20 animate-pulse rounded bg-muted" />
+            <div className="h-4 w-24 animate-pulse rounded bg-muted" />
+            <div className="ml-auto h-4 w-16 animate-pulse rounded bg-muted" />
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 export default function AdminSubscriptionsPage() {
-  const [data, setData] = useState<Subscription[]>(initialSubscriptions);
+  const [data, setData] = useState<ApiSubscription[]>([]);
+  const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [activeTab, setActiveTab] = useState<string>("All");
-  const [viewSub, setViewSub] = useState<Subscription | null>(null);
-  const [editSub, setEditSub] = useState<Subscription | null>(null);
+  const [viewSub, setViewSub] = useState<ApiSubscription | null>(null);
+  const [editSub, setEditSub] = useState<ApiSubscription | null>(null);
   const [addOpen, setAddOpen] = useState(false);
 
-  const getCustomerName = (customerId: string) => {
-    const c = customers.find((c) => c.id === customerId);
-    return c ? `${c.firstName} ${c.lastName}` : customerId;
-  };
+  useEffect(() => {
+    fetch("/api/admin/subscriptions")
+      .then((res) => res.json())
+      .then((json) => setData(json.subscriptions))
+      .catch(() => toast.error("Failed to load subscriptions"))
+      .finally(() => setLoading(false));
+  }, []);
 
   const filtered = data.filter((s) => {
     const q = search.toLowerCase();
-    const name = getCustomerName(s.customerId).toLowerCase();
+    const name = s.user.name.toLowerCase();
     const matchesSearch = name.includes(q) || s.plan.toLowerCase().includes(q) || s.id.toLowerCase().includes(q);
     const matchesTab = activeTab === "All" || s.status === activeTab.toLowerCase();
     return matchesSearch && matchesTab;
@@ -53,14 +100,16 @@ export default function AdminSubscriptionsPage() {
   const handleAdd = (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     const fd = new FormData(e.currentTarget);
-    const newSub: Subscription = {
+    const newSub: ApiSubscription = {
       id: `sub_${Date.now()}`,
-      customerId: fd.get("customerId") as string,
-      plan: fd.get("plan") as "basic" | "premium" | "enterprise",
+      plan: fd.get("plan") as string,
       status: "active",
-      startDate: new Date(),
-      monthlyPrice: parseInt(fd.get("price") as string) || 0,
-      features: [],
+      amount: parseInt(fd.get("price") as string) || 0,
+      razorpayId: "",
+      startDate: new Date().toISOString(),
+      endDate: "",
+      createdAt: new Date().toISOString(),
+      user: { id: fd.get("userId") as string, name: fd.get("userName") as string, phone: "" },
     };
     setData((prev) => [newSub, ...prev]);
     setAddOpen(false);
@@ -74,13 +123,22 @@ export default function AdminSubscriptionsPage() {
     setData((prev) =>
       prev.map((s) =>
         s.id === editSub.id
-          ? { ...s, plan: fd.get("plan") as "basic" | "premium" | "enterprise", monthlyPrice: parseInt(fd.get("price") as string) || s.monthlyPrice }
+          ? { ...s, plan: fd.get("plan") as string, amount: parseInt(fd.get("price") as string) || s.amount }
           : s
       )
     );
     setEditSub(null);
     toast.success("Subscription updated successfully");
   };
+
+  if (loading) {
+    return (
+      <div>
+        <PageHeader title="Subscriptions" description="Manage subscription plans" actionLabel="Create Plan" onAction={() => setAddOpen(true)} />
+        <LoadingSkeleton />
+      </div>
+    );
+  }
 
   return (
     <div>
@@ -104,7 +162,7 @@ export default function AdminSubscriptionsPage() {
         </div>
         <div className="rounded-xl border border-border bg-card p-4">
           <p className="text-sm text-muted-foreground">Total MRR</p>
-          <p className="mt-1 text-2xl font-bold text-green-600">₹{data.filter((s) => s.status === "active").reduce((sum, s) => sum + s.monthlyPrice, 0).toLocaleString("en-IN")}</p>
+          <p className="mt-1 text-2xl font-bold text-green-600">₹{data.filter((s) => s.status === "active").reduce((sum, s) => sum + s.amount, 0).toLocaleString("en-IN")}</p>
         </div>
       </div>
 
@@ -139,15 +197,15 @@ export default function AdminSubscriptionsPage() {
               filtered.map((sub, i) => (
                 <motion.tr key={sub.id} initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: i * 0.02 }}>
                   <TableCell className="font-medium">{sub.id}</TableCell>
-                  <TableCell>{getCustomerName(sub.customerId)}</TableCell>
+                  <TableCell>{sub.user.name}</TableCell>
                   <TableCell>
                     <span className={`inline-flex rounded-full border px-2 py-0.5 text-xs font-medium capitalize ${planBadge[sub.plan] || ""}`}>
-                      {sub.plan}
+                      {planLabel[sub.plan] || sub.plan}
                     </span>
                   </TableCell>
                   <TableCell><StatusBadge status={sub.status} /></TableCell>
                   <TableCell>{new Date(sub.startDate).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })}</TableCell>
-                  <TableCell className="text-right">₹{sub.monthlyPrice.toLocaleString("en-IN")}</TableCell>
+                  <TableCell className="text-right">₹{sub.amount.toLocaleString("en-IN")}</TableCell>
                   <TableCell>
                     <DropdownMenu>
                       <DropdownMenuTrigger className="rounded-md p-1 text-muted-foreground hover:text-foreground"><MoreHorizontal className="size-4" /></DropdownMenuTrigger>
@@ -175,7 +233,7 @@ export default function AdminSubscriptionsPage() {
             {expiringSoon.map((sub) => (
               <div key={sub.id} className="flex items-center justify-between rounded-lg bg-white p-3 text-sm">
                 <div>
-                  <span className="font-medium">{getCustomerName(sub.customerId)}</span>
+                  <span className="font-medium">{sub.user.name}</span>
                   <span className="ml-2 text-muted-foreground">({sub.plan} plan)</span>
                 </div>
                 <span className="text-amber-700">Expires {sub.endDate ? new Date(sub.endDate).toLocaleDateString("en-IN") : "N/A"}</span>
@@ -194,20 +252,14 @@ export default function AdminSubscriptionsPage() {
               <div className="grid grid-cols-2 gap-2">
                 <div><span className="text-muted-foreground">ID:</span> {viewSub.id}</div>
                 <div><span className="text-muted-foreground">Status:</span> <StatusBadge status={viewSub.status} /></div>
-                <div><span className="text-muted-foreground">Customer:</span> {getCustomerName(viewSub.customerId)}</div>
-                <div><span className="text-muted-foreground">Plan:</span> <span className="capitalize">{viewSub.plan}</span></div>
-                <div><span className="text-muted-foreground">Monthly Price:</span> ₹{viewSub.monthlyPrice.toLocaleString("en-IN")}</div>
+                <div><span className="text-muted-foreground">Customer:</span> {viewSub.user.name}</div>
+                <div><span className="text-muted-foreground">Plan:</span> <span className="capitalize">{planLabel[viewSub.plan] || viewSub.plan}</span></div>
+                <div><span className="text-muted-foreground">Amount:</span> ₹{viewSub.amount.toLocaleString("en-IN")}</div>
+                <div><span className="text-muted-foreground">Razorpay ID:</span> {viewSub.razorpayId}</div>
                 <div><span className="text-muted-foreground">Start Date:</span> {new Date(viewSub.startDate).toLocaleDateString("en-IN")}</div>
                 {viewSub.endDate && <div><span className="text-muted-foreground">End Date:</span> {new Date(viewSub.endDate).toLocaleDateString("en-IN")}</div>}
+                <div><span className="text-muted-foreground">Created:</span> {new Date(viewSub.createdAt).toLocaleDateString("en-IN")}</div>
               </div>
-              {viewSub.features.length > 0 && (
-                <div>
-                  <p className="mb-1 font-medium">Features</p>
-                  <ul className="list-inside list-disc text-muted-foreground">
-                    {viewSub.features.map((f) => <li key={f}>{f}</li>)}
-                  </ul>
-                </div>
-              )}
             </div>
           )}
         </DialogContent>
@@ -218,8 +270,9 @@ export default function AdminSubscriptionsPage() {
         <DialogContent>
           <DialogHeader><DialogTitle>Create Subscription</DialogTitle></DialogHeader>
           <form onSubmit={handleAdd} className="space-y-4">
-            <div><Label>Customer</Label><Select name="customerId"><SelectTrigger><SelectValue placeholder="Select customer" /></SelectTrigger><SelectContent>{customers.filter((c) => c.status === "active").map((c) => <SelectItem key={c.id} value={c.id}>{c.firstName} {c.lastName}</SelectItem>)}</SelectContent></Select></div>
-            <div><Label>Plan</Label><Select name="plan"><SelectTrigger><SelectValue placeholder="Select plan" /></SelectTrigger><SelectContent><SelectItem value="basic">Basic</SelectItem><SelectItem value="premium">Premium</SelectItem><SelectItem value="enterprise">Enterprise</SelectItem></SelectContent></Select></div>
+            <div><Label>User Name</Label><Input name="userName" required /></div>
+            <div><Label>User ID</Label><Input name="userId" required /></div>
+            <div><Label>Plan</Label><Select name="plan"><SelectTrigger><SelectValue placeholder="Select plan" /></SelectTrigger><SelectContent><SelectItem value="starter">Starter</SelectItem><SelectItem value="pro">Pro</SelectItem><SelectItem value="free">Free</SelectItem></SelectContent></Select></div>
             <div><Label>Monthly Price (₹)</Label><Input name="price" type="number" required /></div>
             <Button type="submit" className="w-full">Create Subscription</Button>
           </form>
@@ -232,8 +285,8 @@ export default function AdminSubscriptionsPage() {
           <DialogHeader><DialogTitle>Edit Subscription</DialogTitle></DialogHeader>
           {editSub && (
             <form onSubmit={handleEdit} className="space-y-4">
-              <div><Label>Plan</Label><Select name="plan" defaultValue={editSub.plan}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="basic">Basic</SelectItem><SelectItem value="premium">Premium</SelectItem><SelectItem value="enterprise">Enterprise</SelectItem></SelectContent></Select></div>
-              <div><Label>Monthly Price (₹)</Label><Input name="price" type="number" defaultValue={editSub.monthlyPrice} required /></div>
+              <div><Label>Plan</Label><Select name="plan" defaultValue={editSub.plan}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="starter">Starter</SelectItem><SelectItem value="pro">Pro</SelectItem><SelectItem value="free">Free</SelectItem></SelectContent></Select></div>
+              <div><Label>Monthly Price (₹)</Label><Input name="price" type="number" defaultValue={editSub.amount} required /></div>
               <Button type="submit" className="w-full">Save Changes</Button>
             </form>
           )}
