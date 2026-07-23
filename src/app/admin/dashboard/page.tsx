@@ -88,7 +88,7 @@ export default function AdminDashboardPage() {
 
   if (!data) return <Skeleton />;
 
-  const maxRevenue = Math.max(...data.monthlyRevenue.map((m) => m.value));
+  const maxRevenue = Math.max(...data.monthlyRevenue.map((m) => m.value), 1);
 
   const statCards = [
     { label: "Total Customers", value: data.totalCustomers, icon: Users, color: "text-blue-600 bg-blue-50", change: `+${data.newCustomersThisMonth} this month` },

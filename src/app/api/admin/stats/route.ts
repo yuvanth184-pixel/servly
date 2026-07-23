@@ -68,10 +68,9 @@ export async function GET(request: NextRequest) {
           customer: { select: { name: true } },
         },
       }),
-      prisma.payment.groupBy({
-        by: ["createdAt"],
+      prisma.payment.findMany({
         where: { status: "completed", createdAt: { gte: sixMonthsAgo } },
-        _sum: { amount: true },
+        select: { amount: true, createdAt: true },
       }),
     ]);
 
@@ -88,7 +87,7 @@ export async function GET(request: NextRequest) {
       const d = new Date(entry.createdAt);
       const key = `${d.getFullYear()}-${d.getMonth()}`;
       if (key in monthlyRevenueMap) {
-        monthlyRevenueMap[key] += entry._sum.amount ?? 0;
+        monthlyRevenueMap[key] += entry.amount ?? 0;
       }
     }
 
@@ -97,22 +96,24 @@ export async function GET(request: NextRequest) {
       return { month: monthNames[month], value };
     });
 
-    const recentActivity = {
-      bookings: recentBookings.map((b: (typeof recentBookings)[number]) => ({
+    const recentActivity = [
+      ...recentBookings.map((b: (typeof recentBookings)[number]) => ({
         id: b.id,
-        customerName: b.customer.name ?? b.customer.phone,
-        serviceName: b.service.name,
-        status: b.status,
-        createdAt: b.createdAt,
+        type: "booking",
+        message: `${b.customer.name ?? b.customer.phone} booked ${b.service.name}`,
+        userName: b.customer.name ?? b.customer.phone,
+        timestamp: b.createdAt.toISOString(),
       })),
-      payments: recentPayments.map((p: (typeof recentPayments)[number]) => ({
+      ...recentPayments.map((p: (typeof recentPayments)[number]) => ({
         id: p.id,
-        amount: p.amount,
-        status: p.status,
-        customerName: p.customer.name,
-        createdAt: p.createdAt,
+        type: "payment",
+        message: `₹${p.amount} payment from ${p.customer.name ?? "customer"}`,
+        userName: p.customer.name ?? "Customer",
+        timestamp: p.createdAt.toISOString(),
       })),
-    };
+    ]
+      .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
+      .slice(0, 10);
 
     return NextResponse.json({
       totalCustomers,
