@@ -30,11 +30,8 @@ export async function POST(request: NextRequest) {
 
     const hashedPassword = await bcrypt.hash(password, 10);
 
-    const userCount = await prisma.user.count();
-    const role = userCount === 0 ? "admin" : "customer";
-
     const user = await prisma.user.create({
-      data: { phone, password: hashedPassword, name: name || null, role },
+      data: { phone, password: hashedPassword, name: name || null, role: "customer" },
     });
 
     const session = {
