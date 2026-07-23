@@ -11,7 +11,7 @@ import {
   User,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import { Separator } from "@/components/ui/separator";
 import {
   DropdownMenu,
@@ -42,6 +42,9 @@ export function Navbar({ portal, onMenuToggle }: NavbarProps) {
     ? `+91 ${phone.slice(0, 5)}****`
     : "User";
   const initials = phone ? phone.slice(-2).toUpperCase() : "U";
+  const avatarUrl = user?.id
+    ? `https://api.dicebear.com/9.x/avataaars/svg?seed=${user.id}`
+    : "";
 
   return (
     <header
@@ -85,6 +88,7 @@ export function Navbar({ portal, onMenuToggle }: NavbarProps) {
               }
             >
               <Avatar size="sm">
+                {avatarUrl && <AvatarImage src={avatarUrl} alt="Avatar" />}
                 <AvatarFallback>{initials}</AvatarFallback>
               </Avatar>
             </DropdownMenuTrigger>

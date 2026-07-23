@@ -3,7 +3,7 @@
 import { motion } from "motion/react";
 import { Phone, Shield, Info } from "lucide-react";
 import { useAuth } from "@/context/auth-context";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 
 export function ProfilePage() {
   const { user } = useAuth();
@@ -11,6 +11,9 @@ export function ProfilePage() {
   const phone = user?.phone || "";
   const name = user?.name || "User";
   const initials = phone ? phone.slice(-2).toUpperCase() : "U";
+  const avatarUrl = user?.id
+    ? `https://api.dicebear.com/9.x/avataaars/svg?seed=${user.id}`
+    : "";
 
   return (
     <div className="flex justify-center">
@@ -23,6 +26,7 @@ export function ProfilePage() {
         >
           <div className="mb-6 flex items-center gap-4">
             <Avatar size="lg">
+              {avatarUrl && <AvatarImage src={avatarUrl} alt="Avatar" />}
               <AvatarFallback className="text-xl">{initials}</AvatarFallback>
             </Avatar>
             <div>
