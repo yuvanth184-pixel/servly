@@ -26,6 +26,7 @@ export async function GET(request: NextRequest) {
         phone: true,
         name: true,
         email: true,
+        role: true,
         createdAt: true,
         subscription: {
           select: { plan: true, status: true, amount: true },
